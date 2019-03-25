@@ -17,7 +17,7 @@ ENV NG_NAGIOS_CONFIG_FILE  ${NAGIOS_HOME}/etc/nagios.cfg
 ENV NG_CGI_DIR             ${NAGIOS_HOME}/sbin
 ENV NG_WWW_DIR             ${NAGIOS_HOME}/share/nagiosgraph
 ENV NG_CGI_URL             /cgi-bin
-ENV NAGIOS_BRANCH          nagios-4.3.4
+ENV NAGIOS_BRANCH          nagios-4.4.3
 ENV NAGIOS_PLUGINS_BRANCH  release-2.2.1
 ENV NRPE_BRANCH            nrpe-3.2.1
 
@@ -94,11 +94,8 @@ RUN cd /tmp                                           && \
     ./configure                                       && \
     make                                              && \
     make install                                      && \
-    make clean
-
-## Nagios 4.3.1 has leftover debug code which spams syslog every 15 seconds
-## Its fixed in 4.3.2 and the patch can be removed then
-
+    make clean                                        && \
+    cd /tmp && rm -Rf qstat
 
 RUN cd /tmp                                                                          && \
     git clone https://github.com/NagiosEnterprises/nagioscore.git -b $NAGIOS_BRANCH  && \
@@ -117,23 +114,27 @@ RUN cd /tmp                                                                     
     make install-config                                                              && \
     make install-commandmode                                                         && \
     make install-webconf                                                             && \
-    make clean
+    make clean                                                                       && \
+    cd /tmp && rm -Rf nagioscore
 
 RUN cd /tmp                                                                                   && \
     git clone https://github.com/nagios-plugins/nagios-plugins.git -b $NAGIOS_PLUGINS_BRANCH  && \
     cd nagios-plugins                                                                         && \
     ./tools/setup                                                                             && \
-    ./configure                  \
-        --prefix=${NAGIOS_HOME}  \
+    ./configure                                                 \
+        --prefix=${NAGIOS_HOME}                                 \
+        --with-ipv6                                             \
+        --with-ping6-command="/bin/ping6 -n -U -W %d -c %d %s"  \
                                                                                               && \
     make                                                                                      && \
     make install                                                                              && \
     make clean                                                                                && \
     mkdir -p /usr/lib/nagios/plugins                                                          && \
-    ln -sf /opt/nagios/libexec/utils.pm /usr/lib/nagios/plugins
+    ln -sf ${NAGIOS_HOME}/libexec/utils.pm /usr/lib/nagios/plugins                            && \
+    cd /tmp && rm -Rf nagios-plugins
 
-RUN wget -O /opt/nagios/libexec/check_ncpa.py https://raw.githubusercontent.com/NagiosEnterprises/ncpa/v2.0.5/client/check_ncpa.py  && \
-    chmod +x /opt/nagios/libexec/check_ncpa.py
+RUN wget -O ${NAGIOS_HOME}/libexec/check_ncpa.py https://raw.githubusercontent.com/NagiosEnterprises/ncpa/v2.0.5/client/check_ncpa.py  && \
+    chmod +x ${NAGIOS_HOME}/libexec/check_ncpa.py
 
 RUN cd /tmp                                                                  && \
     git clone https://github.com/NagiosEnterprises/nrpe.git -b $NRPE_BRANCH  && \
@@ -144,7 +145,8 @@ RUN cd /tmp                                                                  && 
                                                                              && \
     make check_nrpe                                                          && \
     cp src/check_nrpe ${NAGIOS_HOME}/libexec/                                && \
-    make clean
+    make clean                                                               && \
+    cd /tmp && rm -Rf nrpe
 
 RUN cd /tmp                                                          && \
     git clone https://git.code.sf.net/p/nagiosgraph/git nagiosgraph  && \
@@ -156,7 +158,8 @@ RUN cd /tmp                                                          && \
         --nagios-perfdata-file ${NAGIOS_HOME}/var/perfdata.log  \
         --nagios-cgi-url /cgi-bin                               \
                                                                      && \
-    cp share/nagiosgraph.ssi ${NAGIOS_HOME}/share/ssi/common-header.ssi
+    cp share/nagiosgraph.ssi ${NAGIOS_HOME}/share/ssi/common-header.ssi && \
+    cd /tmp && rm -Rf nagiosgraph
 
 RUN cd /opt                                                                         && \
     pip install pymssql                                                             && \
@@ -166,15 +169,15 @@ RUN cd /opt                                                                     
     git clone https://github.com/nagiosenterprises/check_mssql_collection.git   nagios-mssql  && \
     chmod +x /opt/WL-Nagios-Plugins/check*                                          && \
     chmod +x /opt/JE-Nagios-Plugins/check_mem/check_mem.pl                          && \
-    cp /opt/JE-Nagios-Plugins/check_mem/check_mem.pl /opt/nagios/libexec/           && \
-    cp /opt/nagios-mssql/check_mssql_database.py /opt/nagios/libexec/                         && \
-    cp /opt/nagios-mssql/check_mssql_server.py /opt/nagios/libexec/
+    cp /opt/JE-Nagios-Plugins/check_mem/check_mem.pl ${NAGIOS_HOME}/libexec/           && \
+    cp /opt/nagios-mssql/check_mssql_database.py ${NAGIOS_HOME}/libexec/                         && \
+    cp /opt/nagios-mssql/check_mssql_server.py ${NAGIOS_HOME}/libexec/
 
 
 RUN sed -i.bak 's/.*\=www\-data//g' /etc/apache2/envvars
 RUN export DOC_ROOT="DocumentRoot $(echo $NAGIOS_HOME/share)"                         && \
     sed -i "s,DocumentRoot.*,$DOC_ROOT," /etc/apache2/sites-enabled/000-default.conf  && \
-    sed -i "s,</VirtualHost>,<IfDefine ENABLE_USR_LIB_CGI_BIN>\nScriptAlias /cgi-bin/ /opt/nagios/sbin/\n</IfDefine>\n</VirtualHost>," /etc/apache2/sites-enabled/000-default.conf  && \
+    sed -i "s,</VirtualHost>,<IfDefine ENABLE_USR_LIB_CGI_BIN>\nScriptAlias /cgi-bin/ ${NAGIOS_HOME}/sbin/\n</IfDefine>\n</VirtualHost>," /etc/apache2/sites-enabled/000-default.conf  && \
     ln -s /etc/apache2/mods-available/cgi.load /etc/apache2/mods-enabled/cgi.load
 
 RUN mkdir -p -m 0755 /usr/share/snmp/mibs                     && \
@@ -187,8 +190,8 @@ RUN mkdir -p -m 0755 /usr/share/snmp/mibs                     && \
     ln -s ${NAGIOS_HOME}/bin/nagios /usr/local/bin/nagios     && \
     download-mibs && echo "mibs +ALL" > /etc/snmp/snmp.conf
 
-RUN sed -i 's,/bin/mail,/usr/bin/mail,' /opt/nagios/etc/objects/commands.cfg  && \
-    sed -i 's,/usr/usr,/usr,'           /opt/nagios/etc/objects/commands.cfg
+RUN sed -i 's,/bin/mail,/usr/bin/mail,' ${NAGIOS_HOME}/etc/objects/commands.cfg  && \
+    sed -i 's,/usr/usr,/usr,'           ${NAGIOS_HOME}/etc/objects/commands.cfg
 
 RUN cp /etc/services /var/spool/postfix/etc/  && \
     echo "smtp_address_preference = ipv4" >> /etc/postfix/main.cf
@@ -199,13 +202,13 @@ RUN rm -rf /etc/sv/getty-5
 
 ADD overlay /
 
-RUN echo "use_timezone=${NAGIOS_TIMEZONE}" >> /opt/nagios/etc/nagios.cfg
+RUN echo "use_timezone=${NAGIOS_TIMEZONE}" >> ${NAGIOS_HOME}/etc/nagios.cfg
 
 # Copy example config in-case the user has started with empty var or etc
 
 RUN mkdir -p /orig/var && mkdir -p /orig/etc  && \
-    cp -Rp /opt/nagios/var/* /orig/var/       && \
-    cp -Rp /opt/nagios/etc/* /orig/etc/
+    cp -Rp ${NAGIOS_HOME}/var/* /orig/var/       && \
+    cp -Rp ${NAGIOS_HOME}/etc/* /orig/etc/
 
 RUN a2enmod session         && \
     a2enmod session_cookie  && \

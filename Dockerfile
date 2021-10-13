@@ -1,4 +1,4 @@
-FROM ubuntu:16.04
+FROM ubuntu:20.04
 MAINTAINER Jason Rivers <jason@jasonrivers.co.uk>
 
 ENV NAGIOS_HOME            /opt/nagios
@@ -17,9 +17,11 @@ ENV NG_NAGIOS_CONFIG_FILE  ${NAGIOS_HOME}/etc/nagios.cfg
 ENV NG_CGI_DIR             ${NAGIOS_HOME}/sbin
 ENV NG_WWW_DIR             ${NAGIOS_HOME}/share/nagiosgraph
 ENV NG_CGI_URL             /cgi-bin
-ENV NAGIOS_BRANCH          nagios-4.4.5
-ENV NAGIOS_PLUGINS_BRANCH  release-2.2.1
-ENV NRPE_BRANCH            nrpe-3.2.1
+ENV NAGIOS_BRANCH          nagios-4.4.6
+ENV NAGIOS_PLUGINS_BRANCH  release-2.3.3
+ENV NRPE_BRANCH            nrpe-4.0.3
+ENV NCPA_BRANCH            v2.3.1
+ENV NSCA_BRANCH            nsca-2.10.0
 
 
 RUN echo postfix postfix/main_mailer_type string "'Internet Site'" | debconf-set-selections  && \
@@ -46,19 +48,20 @@ RUN echo postfix postfix/main_mailer_type string "'Internet Site'" | debconf-set
         libdbd-mysql-perl                   \
         libdbi-dev                          \
         libdbi-perl                         \
-        libfreeradius-client-dev            \
-        libgd2-xpm-dev                      \
+        libfreeradius-dev                   \
+        libgdchart-gd2-xpm-dev              \
         libgd-gd2-perl                      \
         libjson-perl                        \
         libldap2-dev                        \
+        libmonitoring-plugin-perl           \
         libmysqlclient-dev                  \
         libnagios-object-perl               \
-        libnagios-plugin-perl               \
         libnet-snmp-perl                    \
         libnet-snmp-perl                    \
         libnet-tftp-perl                    \
         libnet-xmpp-perl                    \
         libpq-dev                           \
+        libradsec-dev                       \
         libredis-perl                       \
         librrds-perl                        \
         libssl-dev                          \
@@ -70,7 +73,8 @@ RUN echo postfix postfix/main_mailer_type string "'Internet Site'" | debconf-set
         php-cli                             \
         php-gd                              \
         postfix                             \
-        python-pip                          \
+        python3-pip                         \
+        python3-nagiosplugin                \
         rsyslog                             \
         runit                               \
         smbclient                           \
@@ -133,7 +137,7 @@ RUN cd /tmp                                                                     
     ln -sf ${NAGIOS_HOME}/libexec/utils.pm /usr/lib/nagios/plugins                            && \
     cd /tmp && rm -Rf nagios-plugins
 
-RUN wget -O ${NAGIOS_HOME}/libexec/check_ncpa.py https://raw.githubusercontent.com/NagiosEnterprises/ncpa/v2.0.5/client/check_ncpa.py  && \
+RUN wget -O ${NAGIOS_HOME}/libexec/check_ncpa.py https://raw.githubusercontent.com/NagiosEnterprises/ncpa/${NCPA_BRANCH}/client/check_ncpa.py  && \
     chmod +x ${NAGIOS_HOME}/libexec/check_ncpa.py
 
 RUN cd /tmp                                                                  && \
@@ -147,6 +151,22 @@ RUN cd /tmp                                                                  && 
     cp src/check_nrpe ${NAGIOS_HOME}/libexec/                                && \
     make clean                                                               && \
     cd /tmp && rm -Rf nrpe
+
+RUN cd /tmp                                                 && \
+    git clone https://github.com/NagiosEnterprises/nsca.git && \
+    cd nsca                                                 && \
+    git checkout $NSCA_TAG                                  && \
+    ./configure                                                \
+        --prefix=${NAGIOS_HOME}                                \
+        --with-nsca-user=${NAGIOS_USER}                        \
+        --with-nsca-grp=${NAGIOS_GROUP}                     && \
+    make all                                                && \
+    cp src/nsca ${NAGIOS_HOME}/bin/                         && \
+    cp src/send_nsca ${NAGIOS_HOME}/bin/                    && \
+    cp sample-config/nsca.cfg ${NAGIOS_HOME}/etc/           && \
+    cp sample-config/send_nsca.cfg ${NAGIOS_HOME}/etc/      && \
+    sed -i 's/^#server_address.*/server_address=0.0.0.0/'  ${NAGIOS_HOME}/etc/nsca.cfg && \
+    cd /tmp && rm -Rf nsca
 
 RUN cd /tmp                                                          && \
     git clone https://git.code.sf.net/p/nagiosgraph/git nagiosgraph  && \
@@ -206,9 +226,10 @@ RUN echo "use_timezone=${NAGIOS_TIMEZONE}" >> ${NAGIOS_HOME}/etc/nagios.cfg
 
 # Copy example config in-case the user has started with empty var or etc
 
-RUN mkdir -p /orig/var && mkdir -p /orig/etc  && \
-    cp -Rp ${NAGIOS_HOME}/var/* /orig/var/       && \
-    cp -Rp ${NAGIOS_HOME}/etc/* /orig/etc/
+RUN mkdir -p /orig/var                     && \
+    mkdir -p /orig/etc                     && \
+    cp -Rp ${NAGIOS_HOME}/var/* /orig/var/ && \
+    cp -Rp ${NAGIOS_HOME}/etc/* /orig/etc/ 
 
 RUN a2enmod session         && \
     a2enmod session_cookie  && \

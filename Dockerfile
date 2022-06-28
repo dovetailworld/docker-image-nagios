@@ -159,7 +159,9 @@ RUN cd /tmp                                                 && \
     ./configure                                                \
         --prefix=${NAGIOS_HOME}                                \
         --with-nsca-user=${NAGIOS_USER}                        \
-        --with-nsca-grp=${NAGIOS_GROUP}                     && \
+        --with-nsca-grp=${NAGIOS_GROUP}                        \
+        --with-mcrypt-lib=/usr/lib64/                          \
+        --with-mcrypt-inc=/usr/include                      && \
     make all                                                && \
     cp src/nsca ${NAGIOS_HOME}/bin/                         && \
     cp src/send_nsca ${NAGIOS_HOME}/bin/                    && \

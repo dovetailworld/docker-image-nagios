@@ -17,11 +17,12 @@ ENV NG_NAGIOS_CONFIG_FILE  ${NAGIOS_HOME}/etc/nagios.cfg
 ENV NG_CGI_DIR             ${NAGIOS_HOME}/sbin
 ENV NG_WWW_DIR             ${NAGIOS_HOME}/share/nagiosgraph
 ENV NG_CGI_URL             /cgi-bin
-ENV NAGIOS_BRANCH          nagios-4.4.6
-ENV NAGIOS_PLUGINS_BRANCH  release-2.3.3
+ENV NAGIOS_BRANCH          nagios-4.4.7
+ENV NAGIOS_PLUGINS_BRANCH  release-2.4.0
 ENV NRPE_BRANCH            nrpe-4.0.3
-ENV NCPA_BRANCH            v2.3.1
-ENV NSCA_BRANCH            nsca-2.10.0
+ENV NCPA_BRANCH            v2.4.0
+ENV NSCA_BRANCH            nsca-2.10.2
+ENV NAGIOSTV_VERSION       0.8.5
 
 
 RUN echo postfix postfix/main_mailer_type string "'Internet Site'" | debconf-set-selections  && \
@@ -45,9 +46,13 @@ RUN echo postfix postfix/main_mailer_type string "'Internet Site'" | debconf-set
         libapache2-mod-php                  \
         libcache-memcached-perl             \
         libcgi-pm-perl                      \
+        libcrypt-des-perl                   \
+        libcrypt-rijndael-perl              \
         libdbd-mysql-perl                   \
+        libdbd-pg-perl                      \
         libdbi-dev                          \
         libdbi-perl                         \
+        libdigest-hmac-perl                 \
         libfreeradius-dev                   \
         libgdchart-gd2-xpm-dev              \
         libgd-gd2-perl                      \
@@ -75,6 +80,7 @@ RUN echo postfix postfix/main_mailer_type string "'Internet Site'" | debconf-set
         postfix                             \
         python3-pip                         \
         python3-nagiosplugin                \
+        rsync                               \
         rsyslog                             \
         runit                               \
         smbclient                           \
@@ -121,21 +127,27 @@ RUN cd /tmp                                                                     
     make clean                                                                       && \
     cd /tmp && rm -Rf nagioscore
 
+ADD patches/nagios-plugins-2.4.0_check_ifstatus.patch /tmp/nagios-plugins-2.4.0_check_ifstatus.patch
+
 RUN cd /tmp                                                                                   && \
     git clone https://github.com/nagios-plugins/nagios-plugins.git -b $NAGIOS_PLUGINS_BRANCH  && \
     cd nagios-plugins                                                                         && \
+    patch plugins-scripts/check_ifstatus.pl /tmp/nagios-plugins-2.4.0_check_ifstatus.patch    && \
     ./tools/setup                                                                             && \
     ./configure                                                 \
         --prefix=${NAGIOS_HOME}                                 \
         --with-ipv6                                             \
-        --with-ping6-command="/bin/ping6 -n -U -W %d -c %d %s"  \
+        --with-ping-command="/usr/bin/ping -n -U -W %d -c %d %s"  \
+        --with-ping6-command="/usr/bin/ping -6 -n -U -W %d -c %d %s"  \
                                                                                               && \
     make                                                                                      && \
     make install                                                                              && \
     make clean                                                                                && \
     mkdir -p /usr/lib/nagios/plugins                                                          && \
     ln -sf ${NAGIOS_HOME}/libexec/utils.pm /usr/lib/nagios/plugins                            && \
-    cd /tmp && rm -Rf nagios-plugins
+    chown root:root ${NAGIOS_HOME}/libexec/check_icmp                                         && \
+    chmod u+s ${NAGIOS_HOME}/libexec/check_icmp                                               && \
+    cd /tmp && rm -Rf nagios-plugins                                                          
 
 RUN wget -O ${NAGIOS_HOME}/libexec/check_ncpa.py https://raw.githubusercontent.com/NagiosEnterprises/ncpa/${NCPA_BRANCH}/client/check_ncpa.py  && \
     chmod +x ${NAGIOS_HOME}/libexec/check_ncpa.py
@@ -182,17 +194,31 @@ RUN cd /tmp                                                          && \
     cd /tmp && rm -Rf nagiosgraph
 
 RUN cd /opt                                                                         && \
-    pip install pymssql                                                             && \
+    pip install pymssql paho-mqtt pymssql                                           && \
     git clone https://github.com/willixix/naglio-plugins.git     WL-Nagios-Plugins  && \
     git clone https://github.com/JasonRivers/nagios-plugins.git  JR-Nagios-Plugins  && \
     git clone https://github.com/justintime/nagios-plugins.git   JE-Nagios-Plugins  && \
     git clone https://github.com/nagiosenterprises/check_mssql_collection.git   nagios-mssql  && \
+    git clone https://github.com/jpmens/check-mqtt.git           jpmens-mqtt        && \
+    git clone https://github.com/danfruehauf/nagios-plugins.git  DF-Nagios-Plugins  && \
     chmod +x /opt/WL-Nagios-Plugins/check*                                          && \
     chmod +x /opt/JE-Nagios-Plugins/check_mem/check_mem.pl                          && \
-    cp /opt/JE-Nagios-Plugins/check_mem/check_mem.pl ${NAGIOS_HOME}/libexec/           && \
-    cp /opt/nagios-mssql/check_mssql_database.py ${NAGIOS_HOME}/libexec/                         && \
-    cp /opt/nagios-mssql/check_mssql_server.py ${NAGIOS_HOME}/libexec/
+    chmod +x /opt/jpmens-mqtt/check-mqtt.py                                         && \
+    chmod +x /opt/DF-Nagios-Plugins/check_sql/check_sql                             && \
+    chmod +x /opt/DF-Nagios-Plugins/check_jenkins/check_jenkins                     && \
+    chmod +x /opt/DF-Nagios-Plugins/check_vpn/check_vpn                             && \
+    cp /opt/JE-Nagios-Plugins/check_mem/check_mem.pl ${NAGIOS_HOME}/libexec/        && \
+    cp /opt/nagios-mssql/check_mssql_database.py ${NAGIOS_HOME}/libexec/            && \
+    cp /opt/nagios-mssql/check_mssql_server.py ${NAGIOS_HOME}/libexec/              && \
+    cp /opt/jpmens-mqtt/check-mqtt.py ${NAGIOS_HOME}/libexec/                       && \
+    cp /opt/DF-Nagios-Plugins/check_sql/check_sql ${NAGIOS_HOME}/libexec/           && \
+    cp /opt/DF-Nagios-Plugins/check_jenkins/check_jenkins ${NAGIOS_HOME}/libexec/   && \
+    cp /opt/DF-Nagios-Plugins/check_vpn/check_vpn ${NAGIOS_HOME}/libexec/
 
+RUN cd /tmp && \
+    wget https://github.com/chriscareycode/nagiostv-react/releases/download/v${NAGIOSTV_VERSION}/nagiostv-${NAGIOSTV_VERSION}.tar.gz && \
+    tar xf nagiostv-${NAGIOSTV_VERSION}.tar.gz -C /opt/nagios/share/ && \
+    rm /tmp/nagiostv-${NAGIOSTV_VERSION}.tar.gz
 
 RUN sed -i.bak 's/.*\=www\-data//g' /etc/apache2/envvars
 RUN export DOC_ROOT="DocumentRoot $(echo $NAGIOS_HOME/share)"                         && \
@@ -224,12 +250,17 @@ ADD overlay /
 
 RUN echo "use_timezone=${NAGIOS_TIMEZONE}" >> ${NAGIOS_HOME}/etc/nagios.cfg
 
+
 # Copy example config in-case the user has started with empty var or etc
 
 RUN mkdir -p /orig/var                     && \
     mkdir -p /orig/etc                     && \
     cp -Rp ${NAGIOS_HOME}/var/* /orig/var/ && \
     cp -Rp ${NAGIOS_HOME}/etc/* /orig/etc/ 
+
+## Set the permissions for example config
+RUN find /opt/nagios/etc \! -user ${NAGIOS_USER} -exec chown ${NAGIOS_USER}:${NAGIOS_GROUP} '{}' + && \
+    find /orig/etc \! -user ${NAGIOS_USER} -exec chown ${NAGIOS_USER}:${NAGIOS_GROUP} '{}' +
 
 RUN a2enmod session         && \
     a2enmod session_cookie  && \
@@ -261,6 +292,6 @@ RUN echo "ServerName ${NAGIOS_FQDN}" > /etc/apache2/conf-available/servername.co
     ln -s /etc/apache2/conf-available/servername.conf /etc/apache2/conf-enabled/servername.conf    && \
     ln -s /etc/apache2/conf-available/timezone.conf /etc/apache2/conf-enabled/timezone.conf
 
-EXPOSE 80
+EXPOSE 80 5667 
 
 CMD [ "/usr/local/bin/start_nagios" ]

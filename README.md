@@ -4,15 +4,18 @@ Docker image for Nagios
 
 Build Status: [![Build Status](https://travis-ci.org/JasonRivers/Docker-Nagios.svg?branch=master)](https://travis-ci.org/JasonRivers/Docker-Nagios)
 
-Nagios Core 4.4.6 running on Ubuntu 20.04 LTS with NagiosGraph & NRPE
+Nagios Core 4.4.7 running on Ubuntu 20.04 LTS with NagiosGraph & NRPE
 
 | Product | Version |
 | ------- | ------- |
-| Nagios Core | 4.4.6 |
-| Nagios Plugins | 2.3.3 |
+| Nagios Core | 4.4.7 |
+| Nagios Plugins | 2.4.0 |
 | NRPE | 4.0.3 |
-| NCPA | 2.3.1 |
+| NCPA | 2.4.0 |
 | NSCA | 2.10.0 |
+
+### PATCHES
+* check_ifstatus-2.4.0 - https://github.com/nagios-plugins/nagios-plugins/issues/650
 
 
 ### Configurations
@@ -69,5 +72,5 @@ The default credentials for the web interface is `nagiosadmin` / `nagios`
 * JR-Nagios-Plugins -  custom plugins I've created [<https://github.com/JasonRivers/nagios-plugins>]
 * WL-Nagios-Plugins -  custom plugins from William Leibzon [<https://github.com/willixix/WL-NagiosPlugins>]
 * JE-Nagios-Plugins -  custom plugins from Justin Ellison [<https://github.com/justintime/nagios-plugins>]
-
-
+* DF-Nagios-Plugins - custom pluging for MSSQL monitoring from Dan Fruehauf [<https://github.com/danfruehauf/nagios-plugins>]
+* check-mqtt - custom plugin for mqtt monitoring from Jan-Piet Mens [<https://github.com/jpmens/check-mqtt.git>]
